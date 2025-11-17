@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="mx.edu.utng.proyectotacho">
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
         android:allowBackup="true"
@@ -16,10 +17,12 @@
         android:theme="@style/Theme.ProyectoTacho"
         tools:targetApi="31">
 
-        <!-- AQUÍ DENTRO VA LA API KEY -->
+        <!-- API KEY de Google Maps -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDxJUSz7ZnvHPF-0irIhBZwbKqwvx0bT1o" />
+
+
 
         <activity
             android:name=".MainActivity"

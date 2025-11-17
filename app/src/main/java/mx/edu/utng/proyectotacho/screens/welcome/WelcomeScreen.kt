@@ -13,8 +13,8 @@ import mx.edu.utng.proyectotacho.ui.theme.*
 
 @Composable
 fun WelcomeScreen(
-    onNavigateToMap: () -> Unit,
-    onNavigateToVendorPanel: () -> Unit
+    onNavigateToUserLogin: () -> Unit,
+    onNavigateToVendorLogin: () -> Unit
 ) {
     Surface(
         color = Amber50,
@@ -43,8 +43,9 @@ fun WelcomeScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
+            // Botón para Buscar Negocios (Usuario)
             Button(
-                onClick = onNavigateToMap,
+                onClick = onNavigateToUserLogin,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Amber500),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
@@ -52,10 +53,11 @@ fun WelcomeScreen(
                 Text(text = "Buscar Negocios", fontWeight = FontWeight.Bold)
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
+            // Botón para Vendedor
             Button(
-                onClick = onNavigateToVendorPanel,
+                onClick = onNavigateToVendorLogin,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Gray600),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
@@ -64,4 +66,13 @@ fun WelcomeScreen(
             }
         }
     }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+fun WelcomeScreenPreview() {
+    WelcomeScreen(
+        onNavigateToUserLogin = {},
+        onNavigateToVendorLogin = {}
+    )
 }

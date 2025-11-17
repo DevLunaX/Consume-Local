@@ -1,6 +1,6 @@
 // Archivo: VendorScreens.kt
 // Este archivo reemplaza las implementaciones simples que tenías
-package mx.edu.utng.proyectotacho
+package mx.edu.utng.proyectotacho.screens.vendor
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,12 +9,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -266,7 +267,7 @@ fun ManageProductsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun StatsItem(label: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+fun StatsItem(label: String, value: String, icon: ImageVector) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         Text(value, fontWeight = FontWeight.Bold, fontSize = 20.sp)
@@ -450,8 +451,8 @@ fun StatCard(
     title: String,
     value: String,
     change: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: androidx.compose.ui.graphics.Color,
+    icon: ImageVector,
+    color: Color,
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier) {
@@ -469,7 +470,7 @@ fun StatCard(
 }
 
 @Composable
-fun ProductStatRow(name: String, views: Int, color: androidx.compose.ui.graphics.Color) {
+fun ProductStatRow(name: String, views: Int, color: Color) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,

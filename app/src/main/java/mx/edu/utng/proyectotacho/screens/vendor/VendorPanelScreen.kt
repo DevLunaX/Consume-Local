@@ -1,5 +1,5 @@
 // Archivo: VendorPanelScreen.kt
-package mx.edu.utng.proyectotacho
+package mx.edu.utng.proyectotacho.screens.vendor
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*

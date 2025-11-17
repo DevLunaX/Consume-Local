@@ -1,12 +1,23 @@
 package mx.edu.utng.proyectotacho
 import BusinessDetailScreen
 import MapScreen
+import UserLoginScreen
+import UserRegistrationScreen
+import VendorLoginScreen
+import VendorRegistrationScreen
 import WelcomeScreen
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import androidx.compose.ui.tooling.preview.Preview
+import mx.edu.utng.proyectotacho.screens.users.FavoritesScreen
+import mx.edu.utng.proyectotacho.screens.users.ProfileScreen
+import mx.edu.utng.proyectotacho.screens.vendor.EditProfileScreen
+import mx.edu.utng.proyectotacho.screens.vendor.ManageProductsScreen
+import mx.edu.utng.proyectotacho.screens.vendor.VendorPanelScreen
+import mx.edu.utng.proyectotacho.screens.vendor.ViewReviewsScreen
+import mx.edu.utng.proyectotacho.screens.vendor.ViewStatisticsScreen
 import mx.edu.utng.proyectotacho.ui.theme.ProyectoTachoTheme
 
 class MainActivity : ComponentActivity() {
@@ -20,22 +31,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Enum para definir las pantallas de forma segura
-// 1. Actualiza tu enum
+// Enum para definir las pantallas
 enum class Screen {
     Welcome,
+    UserLogin,              // ← NUEVO
+    VendorLogin,            // ← NUEVO
+    UserRegistration,
+    VendorRegistration,
     Map,
     BusinessDetail,
     VendorPanel,
-    Favorites, // <-- Añade esta línea
-    Profile,  // <-- Añade esta línea
-
+    Favorites,
+    Profile,
     EditProfile,
-
     ManageProducts,
-
     ViewStatistics,
-
     ViewReviews
 }
 
@@ -44,43 +54,83 @@ fun ConsumeLocalApp() {
     var currentScreen by remember { mutableStateOf(Screen.Welcome) }
 
     when (currentScreen) {
+        // ========== PANTALLA DE BIENVENIDA ==========
         Screen.Welcome -> WelcomeScreen(
-            onNavigateToMap = { currentScreen = Screen.Map },
-            onNavigateToVendorPanel = { currentScreen = Screen.VendorPanel }
+            onNavigateToUserLogin = { currentScreen = Screen.UserLogin },
+            onNavigateToVendorLogin = { currentScreen = Screen.VendorLogin }
         )
+
+        // ========== PANTALLAS DE LOGIN ==========
+        Screen.UserLogin -> UserLoginScreen(
+            onBack = { currentScreen = Screen.Welcome },
+            onLoginSuccess = { currentScreen = Screen.Map },
+            onNavigateToRegister = { currentScreen = Screen.UserRegistration }
+        )
+
+        Screen.VendorLogin -> VendorLoginScreen(
+            onBack = { currentScreen = Screen.Welcome },
+            onLoginSuccess = { currentScreen = Screen.VendorPanel },
+            onNavigateToRegister = { currentScreen = Screen.VendorRegistration }
+        )
+
+        // ========== PANTALLAS DE REGISTRO ==========
+        Screen.UserRegistration -> UserRegistrationScreen(
+            onBack = { currentScreen = Screen.UserLogin },
+            onRegisterSuccess = { currentScreen = Screen.Map }
+        )
+
+        Screen.VendorRegistration -> VendorRegistrationScreen(
+            onBack = { currentScreen = Screen.VendorLogin },
+            onRegisterSuccess = { currentScreen = Screen.VendorPanel }
+        )
+
+        // ========== PANTALLAS DE USUARIO ==========
         Screen.Map -> MapScreen(
             onBusinessClick = { currentScreen = Screen.BusinessDetail },
             onNavigate = { newScreen -> currentScreen = newScreen }
         )
+
         Screen.BusinessDetail -> BusinessDetailScreen(
             onBack = { currentScreen = Screen.Map }
         )
-        // --- SECCIÓN MODIFICADA ---
+
+        Screen.Favorites -> FavoritesScreen(
+            onBusinessClick = { currentScreen = Screen.BusinessDetail },
+            onNavigate = { newScreen -> currentScreen = newScreen }
+        )
+
+        Screen.Profile -> ProfileScreen(
+            onLogoutClick = { currentScreen = Screen.Welcome },
+            onNavigate = { newScreen -> currentScreen = newScreen }
+        )
+
+        // ========== PANTALLAS DE VENDEDOR ==========
         Screen.VendorPanel -> VendorPanelScreen(
             onExit = { currentScreen = Screen.Welcome },
-            // Aquí conectamos cada acción con un cambio de pantalla
             onNavigateToEditProfile = { currentScreen = Screen.EditProfile },
             onNavigateToManageProducts = { currentScreen = Screen.ManageProducts },
             onNavigateToStatistics = { currentScreen = Screen.ViewStatistics },
             onNavigateToReviews = { currentScreen = Screen.ViewReviews }
         )
-        // --- CASOS NUEVOS ---
-        Screen.EditProfile -> EditProfileScreen(onBack = { currentScreen = Screen.VendorPanel })
-        Screen.ManageProducts -> ManageProductsScreen(onBack = { currentScreen = Screen.VendorPanel })
-        Screen.ViewStatistics -> ViewStatisticsScreen(onBack = { currentScreen = Screen.VendorPanel })
-        Screen.ViewReviews -> ViewReviewsScreen(onBack = { currentScreen = Screen.VendorPanel })
 
-        // Tus otras pantallas
-        Screen.Favorites -> FavoritesScreen(
-            onBusinessClick = { currentScreen = Screen.BusinessDetail },
-            onNavigate = { newScreen -> currentScreen = newScreen }
+        Screen.EditProfile -> EditProfileScreen(
+            onBack = { currentScreen = Screen.VendorPanel }
         )
-        Screen.Profile -> ProfileScreen(
-            onLogoutClick = { currentScreen = Screen.Welcome },
-            onNavigate = { newScreen -> currentScreen = newScreen }
+
+        Screen.ManageProducts -> ManageProductsScreen(
+            onBack = { currentScreen = Screen.VendorPanel }
+        )
+
+        Screen.ViewStatistics -> ViewStatisticsScreen(
+            onBack = { currentScreen = Screen.VendorPanel }
+        )
+
+        Screen.ViewReviews -> ViewReviewsScreen(
+            onBack = { currentScreen = Screen.VendorPanel }
         )
     }
 }
+
 @Preview(showBackground = true)
 @Composable
 fun DefaultPreview() {
