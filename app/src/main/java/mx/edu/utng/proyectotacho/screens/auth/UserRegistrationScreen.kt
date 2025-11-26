@@ -14,14 +14,19 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import mx.edu.utng.proyectotacho.ui.theme.*
+import kotlinx.coroutines.launch
+import mx.edu.utng.proyectotacho.AuthService
+import mx.edu.utng.proyectotacho.UsuarioApp
 
-// ==================== FORMULARIO DE REGISTRO PARA USUARIOS ====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserRegistrationScreen(
     onBack: () -> Unit,
     onRegisterSuccess: () -> Unit
 ) {
+    // === NUEVA VARIABLE PARA USERNAME ===
+    var username by remember { mutableStateOf("") }
+
     var nombre by remember { mutableStateOf("") }
     var apellido by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -33,14 +38,16 @@ fun UserRegistrationScreen(
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
+    // Lógica Firebase
+    val scope = rememberCoroutineScope()
+    val authService = remember { AuthService() }
+    var isLoading by remember { mutableStateOf(false) }
+
     Surface(
         color = Amber50,
         modifier = Modifier.fillMaxSize()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             // Top Bar
             TopAppBar(
                 title = { Text("Registro de Usuario") },
@@ -80,6 +87,22 @@ fun UserRegistrationScreen(
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
+
+                // === NUEVO CAMPO: NOMBRE DE USUARIO ===
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("Nombre de Usuario") },
+                    leadingIcon = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Amber500,
+                        focusedLabelColor = Amber600
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Nombre
                 OutlinedTextField(
@@ -195,20 +218,18 @@ fun UserRegistrationScreen(
 
                 if (showError) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 14.sp
-                    )
+                    Text(text = errorMessage, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Botón de Registro
+                // Botón de Registro CON LÓGICA
                 Button(
+                    enabled = !isLoading,
                     onClick = {
                         when {
-                            nombre.isBlank() || apellido.isBlank() || email.isBlank() ||
+                            // === VALIDACIÓN DE USERNAME ===
+                            username.isBlank() || nombre.isBlank() || apellido.isBlank() || email.isBlank() ||
                                     telefono.isBlank() || password.isBlank() || confirmPassword.isBlank() -> {
                                 showError = true
                                 errorMessage = "Todos los campos son obligatorios"
@@ -223,18 +244,40 @@ fun UserRegistrationScreen(
                             }
                             else -> {
                                 showError = false
-                                // Aquí iría la lógica de registro
-                                onRegisterSuccess()
+                                isLoading = true
+                                scope.launch {
+                                    val nuevoUsuario = UsuarioApp(
+                                        email = email,
+                                        nombre = "$nombre $apellido",
+                                        username = username,
+                                        rol = "CLIENTE",
+                                        telefono = telefono
+                                        // NOTA: Si quieres guardar el username en la base de datos,
+                                        // debes agregar "val username: String = """ a tu Data Class UsuarioApp
+                                        // y pasarlo aquí como: username = username
+                                    )
+                                    val resultado = authService.registrarUsuario(email, password, nuevoUsuario)
+                                    isLoading = false
+
+                                    if (resultado.isSuccess) {
+                                        onRegisterSuccess()
+                                    } else {
+                                        showError = true
+                                        errorMessage = resultado.exceptionOrNull()?.localizedMessage ?: "Error al registrar"
+                                    }
+                                }
                             }
                         }
                     },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Amber500),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) {
-                    Text(text = "Registrarse", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    if (isLoading) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                    } else {
+                        Text(text = "Registrarse", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

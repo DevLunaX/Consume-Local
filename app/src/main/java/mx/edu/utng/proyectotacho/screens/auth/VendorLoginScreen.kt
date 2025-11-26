@@ -18,11 +18,14 @@ import androidx.compose.ui.unit.sp
 import mx.edu.utng.proyectotacho.ui.theme.*
 
 // ==================== INICIO DE SESIÓN PARA VENDEDORES ====================
+import kotlinx.coroutines.launch // <--- NO OLVIDES ESTE IMPORT
+import mx.edu.utng.proyectotacho.AuthService
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VendorLoginScreen(
     onBack: () -> Unit,
-    onLoginSuccess: () -> Unit,
+    onLoginSuccess: (String) -> Unit, // <--- CAMBIO: Recibe el rol (String)
     onNavigateToRegister: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
@@ -31,13 +34,17 @@ fun VendorLoginScreen(
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
+    // === LÓGICA FIREBASE ===
+    val scope = rememberCoroutineScope()
+    val authService = remember { AuthService() }
+    var isLoading by remember { mutableStateOf(false) }
+    // =======================
+
     Surface(
         color = Amber50,
         modifier = Modifier.fillMaxSize()
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             // Top Bar
             TopAppBar(
                 title = { Text("Panel de Vendedor") },
@@ -61,29 +68,11 @@ fun VendorLoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.ShoppingCart,
-                    contentDescription = null,
-                    modifier = Modifier.size(100.dp),
-                    tint = Gray700
-                )
-
+                // ... (Iconos y textos se mantienen igual) ...
+                Icon(Icons.Default.ShoppingCart, null, Modifier.size(100.dp), tint = Gray700)
                 Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Acceso Vendedor",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Gray700
-                )
-
-                Text(
-                    text = "Administra tu negocio",
-                    fontSize = 16.sp,
-                    color = Gray700,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-
+                Text("Acceso Vendedor", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Gray700)
+                Text("Administra tu negocio", fontSize = 16.sp, color = Gray700, modifier = Modifier.padding(top = 8.dp))
                 Spacer(modifier = Modifier.height(32.dp))
 
                 // Email
@@ -94,10 +83,7 @@ fun VendorLoginScreen(
                     leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Gray600,
-                        focusedLabelColor = Gray700
-                    )
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gray600, focusedLabelColor = Gray700)
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -110,45 +96,32 @@ fun VendorLoginScreen(
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                if (passwordVisible) Icons.Default.Warning else Icons.Default.Lock,
-                                contentDescription = if (passwordVisible) "Ocultar" else "Mostrar"
-                            )
+                            Icon(if (passwordVisible) Icons.Default.Warning else Icons.Default.Lock, contentDescription = null)
                         }
                     },
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Gray600,
-                        focusedLabelColor = Gray700
-                    )
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gray600, focusedLabelColor = Gray700)
                 )
 
                 if (showError) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 14.sp,
-                        textAlign = TextAlign.Center
-                    )
+                    Text(text = errorMessage, color = MaterialTheme.colorScheme.error, fontSize = 14.sp, textAlign = TextAlign.Center)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Olvidé mi contraseña
-                TextButton(
-                    onClick = { /* TODO: Implementar recuperación de contraseña */ },
-                    modifier = Modifier.align(Alignment.End)
-                ) {
+                // Olvidé contraseña... (Igual)
+                TextButton(onClick = { /* TODO */ }, modifier = Modifier.align(Alignment.End)) {
                     Text("¿Olvidaste tu contraseña?", color = Gray700, fontSize = 14.sp)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Botón Iniciar Sesión
+                // === BOTÓN LOGIN CON LÓGICA ===
                 Button(
+                    enabled = !isLoading,
                     onClick = {
                         when {
                             email.isBlank() || password.isBlank() -> {
@@ -157,27 +130,39 @@ fun VendorLoginScreen(
                             }
                             else -> {
                                 showError = false
-                                // Aquí iría la lógica de autenticación
-                                onLoginSuccess()
+                                isLoading = true
+
+                                scope.launch {
+                                    val resultado = authService.login(email, password)
+                                    isLoading = false
+
+                                    resultado.onSuccess { rol ->
+                                        // Devolvemos el rol hacia el MainActivity
+                                        onLoginSuccess(rol)
+                                    }
+                                    resultado.onFailure {
+                                        showError = true
+                                        errorMessage = "Error: Verifica tus credenciales."
+                                    }
+                                }
                             }
                         }
                     },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Gray600),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) {
-                    Text(text = "Iniciar Sesión", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    if (isLoading) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                    } else {
+                        Text(text = "Iniciar Sesión", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Registro
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Text("¿No tienes cuenta?", color = Gray700)
                     TextButton(onClick = onNavigateToRegister) {
                         Text("Registra tu negocio", color = Gray600, fontWeight = FontWeight.Bold)
@@ -186,16 +171,4 @@ fun VendorLoginScreen(
             }
         }
     }
-}
-
-
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun VendorLoginScreenPreview() {
-    VendorLoginScreen(
-        onBack = {},
-        onLoginSuccess = {},
-        onNavigateToRegister = {}
-    )
 }

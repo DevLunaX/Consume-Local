@@ -16,13 +16,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import mx.edu.utng.proyectotacho.ui.theme.*
+import kotlinx.coroutines.launch
+import mx.edu.utng.proyectotacho.AuthService
 
-// ==================== INICIO DE SESIÓN PARA USUARIOS ====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserLoginScreen(
     onBack: () -> Unit,
-    onLoginSuccess: () -> Unit,
+    onLoginSuccess: (String) -> Unit,
     onNavigateToRegister: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
@@ -31,13 +32,16 @@ fun UserLoginScreen(
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
+    // Lógica Firebase
+    val scope = rememberCoroutineScope()
+    val authService = remember { AuthService() }
+    var isLoading by remember { mutableStateOf(false) }
+
     Surface(
         color = Amber50,
         modifier = Modifier.fillMaxSize()
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             // Top Bar
             TopAppBar(
                 title = { Text("Iniciar Sesión") },
@@ -139,7 +143,7 @@ fun UserLoginScreen(
 
                 // Olvidé mi contraseña
                 TextButton(
-                    onClick = { /* TODO: Implementar recuperación de contraseña */ },
+                    onClick = { /* TODO */ },
                     modifier = Modifier.align(Alignment.End)
                 ) {
                     Text("¿Olvidaste tu contraseña?", color = Amber600, fontSize = 14.sp)
@@ -147,8 +151,9 @@ fun UserLoginScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Botón Iniciar Sesión
+                // Botón Iniciar Sesión CON LÓGICA
                 Button(
+                    enabled = !isLoading,
                     onClick = {
                         when {
                             email.isBlank() || password.isBlank() -> {
@@ -157,18 +162,30 @@ fun UserLoginScreen(
                             }
                             else -> {
                                 showError = false
-                                // Aquí iría la lógica de autenticación
-                                onLoginSuccess()
+                                isLoading = true
+                                scope.launch {
+                                    val resultado = authService.login(email, password)
+                                    isLoading = false
+                                    resultado.onSuccess { rol ->
+                                        onLoginSuccess(rol)
+                                    }
+                                    resultado.onFailure {
+                                        showError = true
+                                        errorMessage = "Error: Verifica tu correo o contraseña."
+                                    }
+                                }
                             }
                         }
                     },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Amber500),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) {
-                    Text(text = "Iniciar Sesión", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    if (isLoading) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                    } else {
+                        Text(text = "Iniciar Sesión", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -186,14 +203,4 @@ fun UserLoginScreen(
             }
         }
     }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun UserLoginScreenPreview() {
-    UserLoginScreen(
-        onBack = {},
-        onLoginSuccess = {},
-        onNavigateToRegister = {}
-    )
 }

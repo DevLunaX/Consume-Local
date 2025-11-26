@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
+    alias(libs.plugins.google.gms.google.services)
 
 }
 
@@ -60,6 +61,9 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.play.services.location)
 
+    //mplementation(libs.firebase.firestore)
+    //implementation(libs.firebase.auth.ktx)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -68,4 +72,13 @@ dependencies {
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+
+    // Librería de Autenticación
+    implementation("com.google.firebase:firebase-auth")
+
+    // Librería de Base de Datos (Firestore)
+    implementation("com.google.firebase:firebase-firestore")
 }
