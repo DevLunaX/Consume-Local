@@ -1,26 +1,28 @@
 package mx.edu.utng.proyectotacho
 
-// 1. LOS IMPORTS SIEMPRE VAN ARRIBA
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.firestore.FieldValue
 
 // 2. MODELO DE DATOS
-// Nota: Es vital que todos los campos tengan un valor por defecto (="" o =null)
-// para que Firebase pueda convertir el documento a este objeto automáticamente.
-// En AuthService.kt
 data class UsuarioApp(
     val id: String = "",
     val email: String = "",
     val rol: String = "",
-    val nombre: String = "", // Nombre del propietario
-    val username: String = "", //user name
-    val telefono: String = "", // <--- AGREGADO
-    // Para vendedores:
+    val nombre: String = "",
+    val username: String = "",
+    val telefono: String = "",
     val nombreNegocio: String? = null,
-    val categoria: String? = null, // Tipo de negocio
-    val direccion: String? = null, // <--- AGREGADO
-    val descripcion: String? = null // <--- AGREGADO
+    val categoria: String? = null,
+    val direccion: String? = null,
+    val descripcion: String? = null,
+    val latitud: Double = 0.0,
+    val longitud: Double = 0.0,
+    // Estadísticas
+    val visitas: Int = 0,
+    val ratingPromedio: Double = 0.0,
+    val totalResenas: Int = 0
 )
 
 // 3. LA CLASE DE SERVICIO
@@ -29,75 +31,113 @@ class AuthService {
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
 
-    // FUNCION PARA REGISTRAR-------------------------1-
-    suspend fun registrarUsuario(
-        email: String,
-        pass: String,
-        datosUsuario: UsuarioApp
-    ): Result<String> {
+    // 1. REGISTRAR
+    suspend fun registrarUsuario(email: String, pass: String, datosUsuario: UsuarioApp): Result<String> {
         return try {
-            // A. Crear usuario en Auth
             val authResult = auth.createUserWithEmailAndPassword(email, pass).await()
             val userId = authResult.user?.uid ?: throw Exception("Error al obtener ID")
-
-            // B. Guardar en Firestore con el ID real
             val usuarioAGuardar = datosUsuario.copy(id = userId)
-
-            // Usamos .set() para crear el documento con el mismo ID del usuario
             db.collection("users").document(userId).set(usuarioAGuardar).await()
-
             Result.success(userId)
-        } catch (e: Exception) {
-            // Si falla, devolvemos el error para mostrarlo en pantalla
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
-    // FUNCION PARA LOGIN----------------------------------------2-----------------
+    // 2. LOGIN
     suspend fun login(email: String, pass: String): Result<String> {
         return try {
-            // A. Login
             val authResult = auth.signInWithEmailAndPassword(email, pass).await()
             val userId = authResult.user?.uid ?: throw Exception("ID nulo")
-
-            // B. Pedir el ROL a la base de datos
             val document = db.collection("users").document(userId).get().await()
-
-            // Si por error no tiene rol, asumimos que es CLIENTE para que no truene
             val rol = document.getString("rol") ?: "CLIENTE"
-
             Result.success(rol)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
-    // 3. FUNCION PARA OBTENER LOS DATOS DEL USUARIO ACTUAL----------------------------3-----------------------
+
+    // 3. OBTENER USUARIO ACTUAL
     suspend fun obtenerUsuarioActual(): Result<UsuarioApp> {
         return try {
-            // 1. Obtenemos el ID del usuario que tiene sesión iniciada
-            val userId = auth.currentUser?.uid ?: throw Exception("No hay sesión iniciada")
-
-            // 2. Buscamos su documento en la base de datos
+            val userId = auth.currentUser?.uid ?: throw Exception("No hay sesión")
             val document = db.collection("users").document(userId).get().await()
-
-            // 3. Convertimos ese documento a tu objeto UsuarioApp
-            val usuario = document.toObject(UsuarioApp::class.java)
-                ?: throw Exception("No se encontraron datos")
-
+            val usuario = document.toObject(UsuarioApp::class.java) ?: throw Exception("Sin datos")
             Result.success(usuario)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
-    // 4. FUNCION PARA ACTUALIZAR DATOS DEL USUARIO-----------------------------4------------------------------
+    // 4. ACTUALIZAR USUARIO
     suspend fun actualizarUsuario(usuarioActualizado: UsuarioApp): Result<Unit> {
         return try {
             val userId = usuarioActualizado.id
-            if (userId.isEmpty()) throw Exception("ID de usuario no válido")
-
-            // Sobrescribimos el documento con los nuevos datos
+            if (userId.isEmpty()) throw Exception("ID inválido")
             db.collection("users").document(userId).set(usuarioActualizado).await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // 5. ESCUCHAR NEGOCIOS (MAPA)
+    fun escucharNegociosEnTiempoReal(onDatosActualizados: (List<UsuarioApp>) -> Unit) {
+        db.collection("users")
+            .whereEqualTo("rol", "VENDEDOR")
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) return@addSnapshotListener
+                if (snapshots != null) {
+                    val lista = snapshots.toObjects(UsuarioApp::class.java)
+                    // Filtramos negocios válidos
+                    val validos = lista.filter { it.latitud != 0.0 && it.longitud != 0.0 && !it.nombreNegocio.isNullOrBlank() }
+                    onDatosActualizados(validos)
+                }
+            }
+    }
+
+    // 6. AGREGAR FAVORITO
+    suspend fun agregarFavorito(negocio: UsuarioApp): Result<Unit> {
+        return try {
+            val userId = auth.currentUser?.uid ?: throw Exception("No logueado")
+            db.collection("users").document(userId).collection("favorites").document(negocio.id).set(negocio).await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // 7. ELIMINAR FAVORITO
+    suspend fun eliminarFavorito(negocioId: String): Result<Unit> {
+        return try {
+            val userId = auth.currentUser?.uid ?: throw Exception("No logueado")
+            db.collection("users").document(userId).collection("favorites").document(negocioId).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // 8. VERIFICAR FAVORITO
+    suspend fun esFavorito(negocioId: String): Boolean {
+        return try {
+            val userId = auth.currentUser?.uid ?: return false
+            val doc = db.collection("users").document(userId).collection("favorites").document(negocioId).get().await()
+            doc.exists()
+        } catch (e: Exception) { false }
+    }
+
+    // 9. OBTENER FAVORITOS
+    suspend fun obtenerFavoritos(): Result<List<UsuarioApp>> {
+        return try {
+            val userId = auth.currentUser?.uid ?: throw Exception("No logueado")
+            val snapshot = db.collection("users").document(userId).collection("favorites").get().await()
+            Result.success(snapshot.toObjects(UsuarioApp::class.java))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ====================================================================================
+    // AQUI ESTABA EL ERROR: FALTABA LLAMAR A recalcularPromedio
+    // ====================================================================================
+
+    // 10. SUBIR RESEÑA
+    suspend fun subirResena(review: Review): Result<Unit> {
+        return try {
+            val docRef = db.collection("reviews").document()
+            val reviewConId = review.copy(id = docRef.id)
+            docRef.set(reviewConId).await()
+
+            // ¡ESTO ES LO QUE FALTABA!
+            // Avisamos que hay reseña nueva para actualizar las estrellas del negocio
+            recalcularPromedio(review.businessId)
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -105,8 +145,137 @@ class AuthService {
         }
     }
 
-    // Función para cerrar sesión
+    // 11. ESCUCHAR RESEÑAS (TIEMPO REAL)
+    fun escucharResenas(businessId: String, onReviewsUpdate: (List<Review>) -> Unit) {
+        db.collection("reviews")
+            .whereEqualTo("businessId", businessId)
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) return@addSnapshotListener
+                if (snapshots != null) {
+                    onReviewsUpdate(snapshots.toObjects(Review::class.java))
+                }
+            }
+    }
+
+    // 12-15. ESTADÍSTICAS PERFIL USUARIO
+    suspend fun contarFavoritos(): Int {
+        return try {
+            val userId = auth.currentUser?.uid ?: return 0
+            val snapshot = db.collection("users").document(userId).collection("favorites").get().await()
+            snapshot.size()
+        } catch (e: Exception) { 0 }
+    }
+
+    suspend fun contarMisResenas(): Int {
+        return try {
+            val userId = auth.currentUser?.uid ?: return 0
+            val snapshot = db.collection("reviews").whereEqualTo("userId", userId).get().await()
+            snapshot.size()
+        } catch (e: Exception) { 0 }
+    }
+
+    suspend fun contarVisitas(): Int {
+        return try {
+            val userId = auth.currentUser?.uid ?: return 0
+            val snapshot = db.collection("users").document(userId).collection("visits").get().await()
+            snapshot.size()
+        } catch (e: Exception) { 0 }
+    }
+
+    suspend fun registrarVisita(businessId: String) {
+        try {
+            val userId = auth.currentUser?.uid ?: return
+            val visitaData = hashMapOf("businessId" to businessId, "timestamp" to System.currentTimeMillis())
+            db.collection("users").document(userId).collection("visits").document(businessId).set(visitaData).await()
+        } catch (e: Exception) { }
+    }
+
+    // 16. OBTENER MIS RESEÑAS
+    suspend fun obtenerMisResenasList(): Result<List<Review>> {
+        return try {
+            val userId = auth.currentUser?.uid ?: throw Exception("No logueado")
+            val snapshot = db.collection("reviews").whereEqualTo("userId", userId).get().await()
+            Result.success(snapshot.toObjects(Review::class.java))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // 17. OBTENER MIS VISITAS
+    suspend fun obtenerMisVisitasList(): Result<List<UsuarioApp>> {
+        return try {
+            val userId = auth.currentUser?.uid ?: throw Exception("No logueado")
+            val visitsSnapshot = db.collection("users").document(userId).collection("visits").get().await()
+            val businessIds = visitsSnapshot.documents.map { it.id }
+            if (businessIds.isEmpty()) return Result.success(emptyList())
+
+            // Firestore 'in' soporta max 10, para escolar está bien.
+            val businessesSnapshot = db.collection("users").whereIn("id", businessIds.take(10)).get().await()
+            Result.success(businessesSnapshot.toObjects(UsuarioApp::class.java))
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // 18. INCREMENTAR VISITAS (NEGOCIO)
+    suspend fun incrementarVisitas(businessId: String) {
+        try {
+            db.collection("users").document(businessId)
+                .update("visitas", FieldValue.increment(1))
+                .await()
+        } catch (e: Exception) { }
+    }
+
+    // 19. RECALCULAR PROMEDIO (NEGOCIO)
+    suspend fun recalcularPromedio(businessId: String) {
+        try {
+            // 1. Bajamos TODAS las reseñas de ese negocio
+            val snapshot = db.collection("reviews")
+                .whereEqualTo("businessId", businessId)
+                .get().await()
+
+            val reviews = snapshot.toObjects(Review::class.java)
+
+            if (reviews.isNotEmpty()) {
+                // 2. Calculamos el nuevo promedio matemático
+                val totalEstrellas = reviews.sumOf { it.rating }
+                val totalVotos = reviews.size
+                // Ejemplo: (5 + 4 + 5) / 3 = 4.66
+                val nuevoPromedio = totalEstrellas.toDouble() / totalVotos
+
+                // 3. Guardamos el nuevo rating en el perfil del negocio
+                db.collection("users").document(businessId)
+                    .update(mapOf(
+                        "ratingPromedio" to nuevoPromedio,
+                        "totalResenas" to totalVotos
+                    )).await()
+            }
+        } catch (e: Exception) { }
+    }
+
+    // ESCUCHAR MI PROPIO NEGOCIO (PANEL VENDEDOR)
+    fun escucharMiNegocio(onDatosActualizados: (UsuarioApp) -> Unit) {
+        val userId = auth.currentUser?.uid ?: return
+        db.collection("users").document(userId)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) return@addSnapshotListener
+                if (snapshot != null && snapshot.exists()) {
+                    val usuario = snapshot.toObject(UsuarioApp::class.java)
+                    if (usuario != null) {
+                        onDatosActualizados(usuario)
+                    }
+                }
+            }
+    }
+
     fun cerrarSesion() {
         auth.signOut()
     }
 }
+
+// DATA CLASS DE REVIEW
+data class Review(
+    val id: String = "",
+    val businessId: String = "",
+    val userId: String = "",
+    val userName: String = "",
+    val rating: Int = 0,
+    val comment: String = "",
+    val timestamp: Long = System.currentTimeMillis()
+)

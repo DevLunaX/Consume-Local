@@ -1,25 +1,33 @@
 package mx.edu.utng.proyectotacho
-import BusinessDetailScreen
-import MapScreen
-import UserLoginScreen
-import UserRegistrationScreen
-import VendorLoginScreen
-import VendorRegistrationScreen
-import WelcomeScreen
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import androidx.compose.ui.tooling.preview.Preview
+import mx.edu.utng.proyectotacho.ui.theme.ProyectoTachoTheme
+
+// === IMPORTS CORRECTOS DE TUS PANTALLAS ===
+// Auth
 import mx.edu.utng.proyectotacho.screens.auth.EditProfileUserScreen
+// Users
 import mx.edu.utng.proyectotacho.screens.users.FavoritesScreen
 import mx.edu.utng.proyectotacho.screens.users.ProfileScreen
-import mx.edu.utng.proyectotacho.screens.vendor.EditProfileScreen
+// Vendor
+import mx.edu.utng.proyectotacho.screens.vendor.EditVendorProfileScreen
 import mx.edu.utng.proyectotacho.screens.vendor.ManageProductsScreen
 import mx.edu.utng.proyectotacho.screens.vendor.VendorPanelScreen
+import mx.edu.utng.proyectotacho.screens.vendor.VendorRegistrationScreen // <--- AQUÍ ESTÁ EL BUENO
 import mx.edu.utng.proyectotacho.screens.vendor.ViewReviewsScreen
 import mx.edu.utng.proyectotacho.screens.vendor.ViewStatisticsScreen
-import mx.edu.utng.proyectotacho.ui.theme.ProyectoTachoTheme
+
+// Imports de pantallas que quizás no moviste de carpeta (Si te marcan rojo, avísame)
+import BusinessDetailScreen
+import MapScreen
+import UserLoginScreen
+import UserRegistrationScreen
+import VendorLoginScreen
+import WelcomeScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,8 +43,8 @@ class MainActivity : ComponentActivity() {
 // Enum para definir las pantallas
 enum class Screen {
     Welcome,
-    UserLogin,              // ← NUEVO
-    VendorLogin,            // ← NUEVO
+    UserLogin,
+    VendorLogin,
     UserRegistration,
     VendorRegistration,
     Map,
@@ -44,8 +52,8 @@ enum class Screen {
     VendorPanel,
     Favorites,
     Profile,
-    EditProfileUser,
-    EditProfile,
+    EditProfileUser, // Para Usuario
+    EditProfile,     // Para Vendedor
     ManageProducts,
     ViewStatistics,
     ViewReviews
@@ -54,6 +62,10 @@ enum class Screen {
 @Composable
 fun ConsumeLocalApp() {
     var currentScreen by remember { mutableStateOf(Screen.Welcome) }
+
+    // === VARIABLE NUEVA PARA GUARDAR EL NEGOCIO SELECCIONADO ===
+    var selectedBusiness by remember { mutableStateOf<UsuarioApp?>(null) }
+    // ==========================================================
 
     when (currentScreen) {
         // ========== PANTALLA DE BIENVENIDA ==========
@@ -65,9 +77,7 @@ fun ConsumeLocalApp() {
         // ========== PANTALLAS DE LOGIN ==========
         Screen.UserLogin -> UserLoginScreen(
             onBack = { currentScreen = Screen.Welcome },
-            // AQUI ESTA EL CAMBIO IMPORTANTE:
             onLoginSuccess = { rol ->
-                // Verificamos qué rol nos devolvió Firebase
                 if (rol == "VENDEDOR") {
                     currentScreen = Screen.VendorPanel
                 } else {
@@ -77,14 +87,12 @@ fun ConsumeLocalApp() {
             onNavigateToRegister = { currentScreen = Screen.UserRegistration }
         )
 
-        Screen.VendorLogin -> VendorLoginScreen( // Asumiendo que actualices esta pantalla también
+        Screen.VendorLogin -> VendorLoginScreen(
             onBack = { currentScreen = Screen.Welcome },
             onLoginSuccess = { rol ->
                 if (rol == "VENDEDOR") {
                     currentScreen = Screen.VendorPanel
                 } else {
-                    // Si por error un cliente entra por el login de vendedores,
-                    // el sistema es inteligente y lo manda al mapa de todos modos.
                     currentScreen = Screen.Map
                 }
             },
@@ -102,18 +110,27 @@ fun ConsumeLocalApp() {
             onRegisterSuccess = { currentScreen = Screen.VendorPanel }
         )
 
-        // ========== PANTALLAS DE USUARIO ==========
+        // ACTUALIZA EL MAPA
         Screen.Map -> MapScreen(
-            onBusinessClick = { currentScreen = Screen.BusinessDetail },
+            onBusinessClick = { negocio ->
+                selectedBusiness = negocio // 1. Guardamos el negocio
+                currentScreen = Screen.BusinessDetail // 2. Cambiamos de pantalla
+            },
             onNavigate = { newScreen -> currentScreen = newScreen }
         )
 
+        // ACTUALIZA EL DETALLE
         Screen.BusinessDetail -> BusinessDetailScreen(
+            negocio = selectedBusiness, // 3. Le pasamos el negocio guardado
             onBack = { currentScreen = Screen.Map }
         )
 
+        // En MainActivity.kt
         Screen.Favorites -> FavoritesScreen(
-            onBusinessClick = { currentScreen = Screen.BusinessDetail },
+            onBusinessClick = { negocio ->
+                selectedBusiness = negocio // Reusamos la variable que creamos antes
+                currentScreen = Screen.BusinessDetail
+            },
             onNavigate = { newScreen -> currentScreen = newScreen }
         )
 
@@ -126,12 +143,12 @@ fun ConsumeLocalApp() {
         Screen.VendorPanel -> VendorPanelScreen(
             onExit = { currentScreen = Screen.Welcome },
             onNavigateToEditProfile = { currentScreen = Screen.EditProfile },
-            onNavigateToManageProducts = { currentScreen = Screen.ManageProducts },
             onNavigateToStatistics = { currentScreen = Screen.ViewStatistics },
             onNavigateToReviews = { currentScreen = Screen.ViewReviews }
         )
 
-        Screen.EditProfile -> EditProfileScreen(
+        // AQUÍ USAMOS LA PANTALLA DEL VENDEDOR RENOMBRADA
+        Screen.EditProfile -> EditVendorProfileScreen(
             onBack = { currentScreen = Screen.VendorPanel }
         )
 
@@ -147,10 +164,10 @@ fun ConsumeLocalApp() {
             onBack = { currentScreen = Screen.VendorPanel }
         )
 
-        //Pantalla de edicion de datos
+        // ========== PANTALLA DE EDICIÓN USUARIO ==========
         Screen.EditProfileUser -> EditProfileUserScreen(
-            onBack = { currentScreen = Screen.Profile }, // Si cancela, vuelve al perfil
-            onUpdateSuccess = { currentScreen = Screen.Profile } // Si guarda, vuelve al perfil (y se recargará solo)
+            onBack = { currentScreen = Screen.Profile },
+            onUpdateSuccess = { currentScreen = Screen.Profile }
         )
     }
 }

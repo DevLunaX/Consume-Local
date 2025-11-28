@@ -3,6 +3,8 @@ package mx.edu.utng.proyectotacho.screens.users
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,10 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import mx.edu.utng.proyectotacho.components.AppBottomNavigationBar
 import mx.edu.utng.proyectotacho.Screen
-import mx.edu.utng.proyectotacho.screens.auth.EditProfileUserScreen
 import mx.edu.utng.proyectotacho.ui.theme.*
 import kotlinx.coroutines.launch
 import mx.edu.utng.proyectotacho.AuthService
+import mx.edu.utng.proyectotacho.Review
 import mx.edu.utng.proyectotacho.UsuarioApp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,488 +39,238 @@ fun ProfileScreen(
     onLogoutClick: () -> Unit,
     onNavigate: (Screen) -> Unit
 ) {
-    // === LÓGICA DE FIREBASE ===
     val authService = remember { AuthService() }
     var usuarioData by remember { mutableStateOf<UsuarioApp?>(null) }
+
+    // Contadores
+    var favoritosCount by remember { mutableStateOf(0) }
+    var resenasCount by remember { mutableStateOf(0) }
+    var visitasCount by remember { mutableStateOf(0) }
+
+    // Listas para los BottomSheets
+    var myReviewsList by remember { mutableStateOf<List<Review>>(emptyList()) }
+    var myVisitsList by remember { mutableStateOf<List<UsuarioApp>>(emptyList()) }
+
+    // Controladores de los Sheets
+    var showReviewsSheet by remember { mutableStateOf(false) }
+    var showVisitsSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+
     var isLoading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
-
-    // Cargar datos al entrar a la pantalla
-    LaunchedEffect(Unit) {
-        val resultado = authService.obtenerUsuarioActual()
-        resultado.onSuccess { datos ->
-            usuarioData = datos
-            isLoading = false
-        }
-        resultado.onFailure {
-            isLoading = false
-        }
-    }
-    // ===========================
-
     var showLogoutDialog by remember { mutableStateOf(false) }
+
+    // Cargar datos iniciales
+    LaunchedEffect(Unit) {
+        authService.obtenerUsuarioActual().onSuccess { usuarioData = it }
+        launch { favoritosCount = authService.contarFavoritos() }
+        launch { resenasCount = authService.contarMisResenas() }
+        launch { visitasCount = authService.contarVisitas() }
+        isLoading = false
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
-            // Un pequeño indicador de carga mientras bajan los datos
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Amber500)
             }
         } else {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             ) {
-                // Header con gradiente
+                // Header (Igual que antes)
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(280.dp)
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Amber500, Amber600)
-                            )
-                        )
+                    modifier = Modifier.fillMaxWidth().height(280.dp).background(Brush.verticalGradient(colors = listOf(Amber500, Amber600)))
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(top = 60.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // Foto de perfil con borde
-                        Box(
-                            modifier = Modifier
-                                .size(120.dp)
-                                .background(Color.White, CircleShape)
-                                .padding(4.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                                    .background(Amber100),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Filled.Person,
-                                    contentDescription = "Foto de perfil",
-                                    modifier = Modifier.size(60.dp),
-                                    tint = Amber600
-                                )
+                    Column(modifier = Modifier.fillMaxSize().padding(top = 60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(modifier = Modifier.size(120.dp).background(Color.White, CircleShape).padding(4.dp)) {
+                            Box(modifier = Modifier.fillMaxSize().clip(CircleShape).background(Amber100), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.Person, null, modifier = Modifier.size(60.dp), tint = Amber600)
                             }
                         }
-
                         Spacer(modifier = Modifier.height(16.dp))
-
-                        // === AQUÍ ESTÁ EL CAMBIO: SOLO EL USERNAME ===
-                        Text(
-                            // Si username está vacío (usuarios viejos), muestra el nombre o "Usuario"
-                            text = usuarioData?.username ?: usuarioData?.nombre ?: "Usuario",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        // He eliminado el Text del correo electrónico para que salga SOLO el usuario
-
+                        Text(text = usuarioData?.username ?: usuarioData?.nombre ?: "Usuario", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         Spacer(modifier = Modifier.height(16.dp))
-
-                        // Botón de editar perfil
                         Button(
-                            onClick = {onNavigate(Screen.EditProfileUser)},
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = Amber600
-                            ),
-                            shape = RoundedCornerShape(24.dp),
-                            modifier = Modifier.padding(horizontal = 32.dp)
+                            onClick = { onNavigate(Screen.EditProfileUser) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Amber600),
+                            shape = RoundedCornerShape(24.dp), modifier = Modifier.padding(horizontal = 32.dp)
                         ) {
-                            Icon(
-                                Icons.Outlined.Edit,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Icon(Icons.Outlined.Edit, null, Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Editar Perfil", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
 
-                // Contenido principal
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    // Estadísticas (TODAS EN 0)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 24.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        StatCard(
-                            icon = Icons.Filled.Favorite,
-                            value = "0", // Placeholder
-                            label = "Favoritos",
-                            color = Pink500
-                        )
-                        StatCard(
-                            icon = Icons.Filled.Star,
-                            value = "0", // Placeholder
-                            label = "Reseñas",
-                            color = Amber500
-                        )
-                        StatCard(
-                            icon = Icons.Filled.ShoppingBag,
-                            value = "0", // Placeholder
-                            label = "Visitas",
-                            color = Blue500
-                        )
+                // Cuerpo
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    // Estadísticas
+                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        StatCard(Icons.Filled.Favorite, favoritosCount.toString(), "Favoritos", Pink500)
+                        StatCard(Icons.Filled.Star, resenasCount.toString(), "Reseñas", Amber500)
+                        StatCard(Icons.Filled.ShoppingBag, visitasCount.toString(), "Visitas", Blue500)
                     }
 
-                    // Sección: Mi Actividad
-                    Text(
-                        text = "Mi Actividad",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Gray700,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
+                    // === MI ACTIVIDAD (BOTONES CONECTADOS) ===
+                    Text("Mi Actividad", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gray700, modifier = Modifier.padding(bottom = 12.dp))
+                    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), shape = RoundedCornerShape(16.dp)) {
                         Column {
-                            ModernProfileOption(
-                                icon = Icons.Filled.Favorite,
-                                text = "Mis Favoritos",
-                                description = "0 negocios guardados", // Placeholder
-                                iconColor = Pink500,
-                                onClick = { onNavigate(Screen.Favorites) }
-                            )
+                            ModernProfileOption(Icons.Filled.Favorite, "Mis Favoritos", "$favoritosCount negocios guardados", Pink500) { onNavigate(Screen.Favorites) }
                             Divider(color = Gray100, modifier = Modifier.padding(horizontal = 16.dp))
-                            ModernProfileOption(
-                                icon = Icons.Filled.Star,
-                                text = "Mis Reseñas",
-                                description = "0 reseñas escritas", // Placeholder
-                                iconColor = Amber500,
-                                onClick = { /* TODO */ }
-                            )
-                            Divider(color = Gray100, modifier = Modifier.padding(horizontal = 16.dp))
-                            ModernProfileOption(
-                                icon = Icons.Filled.LocationOn,
-                                text = "Lugares Visitados",
-                                description = "0 negocios", // Placeholder
-                                iconColor = Blue500,
-                                onClick = { /* TODO */ }
-                            )
-                        }
-                    }
 
-                    // Sección: Preferencias
-                    Text(
-                        text = "Preferencias",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Gray700,
-                        modifier = Modifier.padding(bottom = 12.dp, top = 8.dp)
-                    )
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column {
-                            ModernProfileOption(
-                                icon = Icons.Filled.Notifications,
-                                text = "Notificaciones",
-                                description = "Gestionar alertas",
-                                iconColor = Blue500,
-                                onClick = { /* TODO */ }
-                            )
-                            Divider(color = Gray100, modifier = Modifier.padding(horizontal = 16.dp))
-                            ModernProfileOption(
-                                icon = Icons.Filled.Language,
-                                text = "Idioma",
-                                description = "Español",
-                                iconColor = Green600,
-                                onClick = { /* TODO */ }
-                            )
-                            Divider(color = Gray100, modifier = Modifier.padding(horizontal = 16.dp))
-                            ModernProfileOption(
-                                icon = Icons.Filled.DarkMode,
-                                text = "Tema",
-                                description = "Claro",
-                                iconColor = Gray700,
-                                onClick = { /* TODO */ }
-                            )
-                        }
-                    }
-
-                    // Sección: Ayuda y Soporte
-                    Text(
-                        text = "Ayuda y Soporte",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Gray700,
-                        modifier = Modifier.padding(bottom = 12.dp, top = 8.dp)
-                    )
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column {
-                            ModernProfileOption(
-                                icon = Icons.Filled.Help,
-                                text = "Centro de Ayuda",
-                                description = "FAQs y soporte",
-                                iconColor = Blue500,
-                                onClick = { /* TODO */ }
-                            )
-                            Divider(color = Gray100, modifier = Modifier.padding(horizontal = 16.dp))
-                            ModernProfileOption(
-                                icon = Icons.Filled.Info,
-                                text = "Acerca de",
-                                description = "Versión 1.0.0",
-                                iconColor = Gray600,
-                                onClick = { /* TODO */ }
-                            )
-                            Divider(color = Gray100, modifier = Modifier.padding(horizontal = 16.dp))
-                            ModernProfileOption(
-                                icon = Icons.Filled.Share,
-                                text = "Compartir App",
-                                description = "Invita a tus amigos",
-                                iconColor = Green600,
-                                onClick = { /* TODO */ }
-                            )
-                        }
-                    }
-
-                    // Botón de cerrar sesión
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showLogoutDialog = true }
-                            .padding(bottom = 100.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .background(
-                                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ExitToApp,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                            // Botón Reseñas -> Abre Sheet
+                            ModernProfileOption(Icons.Filled.Star, "Mis Reseñas", "$resenasCount reseñas escritas", Amber500) {
+                                scope.launch {
+                                    authService.obtenerMisResenasList().onSuccess { myReviewsList = it }
+                                    showReviewsSheet = true
+                                }
                             }
+                            Divider(color = Gray100, modifier = Modifier.padding(horizontal = 16.dp))
 
+                            // Botón Visitas -> Abre Sheet
+                            ModernProfileOption(Icons.Filled.LocationOn, "Lugares Visitados", "$visitasCount negocios", Blue500) {
+                                scope.launch {
+                                    authService.obtenerMisVisitasList().onSuccess { myVisitsList = it }
+                                    showVisitsSheet = true
+                                }
+                            }
+                        }
+                    }
+
+                    // ... Preferencias y Logout (Igual que antes) ...
+                    Text("Preferencias", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gray700, modifier = Modifier.padding(bottom = 12.dp, top = 8.dp))
+                    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), shape = RoundedCornerShape(16.dp)) {
+                        Column {
+                            ModernProfileOption(Icons.Filled.Notifications, "Notificaciones", "Gestionar alertas", Blue500) { }
+                            Divider(color = Gray100, modifier = Modifier.padding(horizontal = 16.dp))
+                            ModernProfileOption(Icons.Filled.Language, "Idioma", "Español", Green600) { }
+                        }
+                    }
+
+                    Card(modifier = Modifier.fillMaxWidth().clickable { showLogoutDialog = true }.padding(bottom = 100.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), shape = RoundedCornerShape(16.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.error.copy(alpha = 0.1f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.AutoMirrored.Filled.ExitToApp, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(24.dp))
+                            }
                             Spacer(modifier = Modifier.width(16.dp))
-
-                            Text(
-                                text = "Cerrar Sesión",
-                                color = MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            Icon(
-                                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
+                            Text("Cerrar Sesión", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
             }
         }
-
-        // Bottom Navigation
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-        ) {
-            AppBottomNavigationBar(
-                currentScreen = Screen.Profile,
-                onNavigate = onNavigate
-            )
+        Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            AppBottomNavigationBar(currentScreen = Screen.Profile, onNavigate = onNavigate)
         }
     }
 
-    // Diálogo de confirmación de cierre de sesión
+    // === HOJA DE RESEÑAS ===
+    if (showReviewsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showReviewsSheet = false },
+            sheetState = sheetState
+        ) {
+            Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
+                Text("Mis Reseñas", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gray900)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (myReviewsList.isEmpty()) {
+                    Text("No has escrito reseñas aún.", color = Gray500)
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(myReviewsList) { review ->
+                            Card(colors = CardDefaults.cardColors(containerColor = Gray50), shape = RoundedCornerShape(12.dp)) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row {
+                                        repeat(review.rating) { Icon(Icons.Filled.Star, null, tint = Amber500, modifier = Modifier.size(16.dp)) }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(review.comment.ifBlank { "Sin comentario" }, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // === HOJA DE VISITAS ===
+    if (showVisitsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showVisitsSheet = false },
+            sheetState = sheetState
+        ) {
+            Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
+                Text("Lugares Visitados", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gray900)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (myVisitsList.isEmpty()) {
+                    Text("No has visitado lugares aún.", color = Gray500)
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(myVisitsList) { negocio ->
+                            Card(colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(2.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.size(40.dp).background(Blue100, CircleShape), contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Filled.Store, null, tint = Blue500)
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(negocio.nombreNegocio ?: "Negocio", fontWeight = FontWeight.Bold)
+                                        Text(negocio.categoria ?: "Comercio", fontSize = 12.sp, color = Gray500)
+                                    }
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Icon(Icons.Filled.CheckCircle, null, tint = Green600)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Diálogo Logout (Igual)
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
-            icon = {
-                Icon(
-                    Icons.AutoMirrored.Filled.ExitToApp,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
-            },
-            title = {
-                Text("¿Cerrar sesión?", fontWeight = FontWeight.Bold)
-            },
-            text = {
-                Text("¿Estás seguro de que quieres cerrar sesión?")
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        // === LOGICA DE CIERRE DE SESIÓN ===
-                        authService.cerrarSesion()
-                        showLogoutDialog = false
-                        onLogoutClick()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Cerrar Sesión")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("Cancelar")
-                }
-            }
+            title = { Text("¿Cerrar sesión?", fontWeight = FontWeight.Bold) },
+            text = { Text("¿Estás seguro de que quieres cerrar sesión?") },
+            confirmButton = { Button(onClick = { authService.cerrarSesion(); showLogoutDialog = false; onLogoutClick() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Cerrar Sesión") } },
+            dismissButton = { TextButton(onClick = { showLogoutDialog = false }) { Text("Cancelar") } }
         )
     }
 }
 
-// Tus composables auxiliares StatCard y ModernProfileOption se quedan igual
+// Helpers visuales (StatCard y ModernProfileOption iguales que antes)
 @Composable
-fun StatCard(
-    icon: ImageVector,
-    value: String,
-    label: String,
-    color: Color
-) {
-    Card(
-        modifier = Modifier.width(100.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(color.copy(alpha = 0.1f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = color,
-                    modifier = Modifier.size(24.dp)
-                )
+fun StatCard(icon: ImageVector, value: String, label: String, color: Color) {
+    Card(modifier = Modifier.width(100.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp), shape = RoundedCornerShape(16.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(modifier = Modifier.size(40.dp).background(color.copy(alpha = 0.1f), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = value,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = Gray700
-            )
-            Text(
-                text = label,
-                fontSize = 12.sp,
-                color = Gray600
-            )
+            Text(value, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Gray700)
+            Text(label, fontSize = 12.sp, color = Gray600)
         }
     }
 }
 
 @Composable
-fun ModernProfileOption(
-    icon: ImageVector,
-    text: String,
-    description: String,
-    iconColor: Color,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .background(
-                    color = iconColor.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(12.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = iconColor,
-                modifier = Modifier.size(24.dp)
-            )
+fun ModernProfileOption(icon: ImageVector, text: String, description: String, iconColor: Color, onClick: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(48.dp).background(iconColor.copy(alpha = 0.1f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = iconColor, modifier = Modifier.size(24.dp))
         }
-
         Spacer(modifier = Modifier.width(16.dp))
-
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = text,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 16.sp,
-                color = Gray700
-            )
-            Text(
-                text = description,
-                fontSize = 13.sp,
-                color = Gray600
-            )
+            Text(text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Gray700)
+            Text(description, fontSize = 13.sp, color = Gray600)
         }
-
-        Icon(
-            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-            contentDescription = null,
-            tint = Gray400
-        )
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = Gray400)
     }
 }

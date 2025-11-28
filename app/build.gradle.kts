@@ -60,6 +60,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.play.services.location)
+    implementation(libs.androidx.compose.ui.text)
 
     //mplementation(libs.firebase.firestore)
     //implementation(libs.firebase.auth.ktx)

@@ -5,35 +5,32 @@ import android.location.Location
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import coil.compose.rememberAsyncImagePainter
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
@@ -41,383 +38,224 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.launch
+import mx.edu.utng.proyectotacho.R
 import mx.edu.utng.proyectotacho.Screen
 import mx.edu.utng.proyectotacho.components.AppBottomNavigationBar
 import mx.edu.utng.proyectotacho.ui.theme.*
+import mx.edu.utng.proyectotacho.AuthService
+import mx.edu.utng.proyectotacho.UsuarioApp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
-    onBusinessClick: () -> Unit,
+    onBusinessClick: (UsuarioApp) -> Unit, // Recibe el objeto negocio
     onNavigate: (Screen) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val authService = remember { AuthService() }
 
-    // Estados
+    // Datos en tiempo real
+    var listaNegociosReales by remember { mutableStateOf<List<UsuarioApp>>(emptyList()) }
+
+    // === ESTADO CLAVE: NEGOCIO SELECCIONADO ===
+    var selectedBusiness by remember { mutableStateOf<UsuarioApp?>(null) }
+    // ==========================================
+
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
-    var showBusinessList by remember { mutableStateOf(false) }
+
     var hasLocationPermission by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         )
     }
 
-    // Ubicación inicial (Dolores Hidalgo, Guanajuato)
-    val initialLocation = LatLng(21.1561, -100.9319)
-    var currentLocation by remember { mutableStateOf<LatLng?>(null) }
-
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(initialLocation, 15f)
+    // Cargar negocios
+    LaunchedEffect(Unit) {
+        authService.escucharNegociosEnTiempoReal { negocios ->
+            listaNegociosReales = negocios
+        }
     }
 
-    // Configuración del mapa
-    val mapProperties by remember {
+    val initialLocation = LatLng(21.1561, -100.9319)
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(initialLocation, 14f)
+    }
+
+    val mapProperties by remember(hasLocationPermission) {
         mutableStateOf(
             MapProperties(
                 isMyLocationEnabled = hasLocationPermission,
-                isTrafficEnabled = false
+                isTrafficEnabled = false,
+                mapStyleOptions = MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style)
             )
         )
     }
 
-    val mapUiSettings by remember {
-        mutableStateOf(
-            MapUiSettings(
-                zoomControlsEnabled = false,
-                myLocationButtonEnabled = false,
-                compassEnabled = true,
-                mapToolbarEnabled = false
-            )
-        )
-    }
-
-    // Launcher para permisos de ubicación
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         hasLocationPermission = isGranted
         if (isGranted) {
             getCurrentLocation(context) { location ->
-                currentLocation = location
                 scope.launch {
-                    cameraPositionState.animate(
-                        com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(location, 17f),
-                        durationMs = 1000
-                    )
+                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(location, 16f))
                 }
             }
         }
     }
 
-    // Lista de negocios de ejemplo
-    val businesses = remember {
-        listOf(
-            Business("Panadería \"El Buen Pan\"", "★ 4.8 • Panadería • 200m", "https://i.imgur.com/GscB5hM.jpeg", LatLng(21.1571, -100.9329)),
-            Business("Frutería \"La Huerta\"", "★ 4.9 • Frutas y Verduras • 350m", "https://i.imgur.com/u5u06xV.jpeg", LatLng(21.1551, -100.9309)),
-            Business("Tortillería \"Don José\"", "★ 4.7 • Tortillería • 150m", "https://i.imgur.com/GscB5hM.jpeg", LatLng(21.1581, -100.9339)),
-            Business("Carnicería \"La Especial\"", "★ 4.6 • Carnicería • 400m", "https://i.imgur.com/u5u06xV.jpeg", LatLng(21.1541, -100.9299))
-        )
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
-        // Mapa de Google
+        // 1. EL MAPA
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
             properties = mapProperties,
-            uiSettings = mapUiSettings,
+            uiSettings = MapUiSettings(zoomControlsEnabled = false, myLocationButtonEnabled = false, compassEnabled = true),
             onMapClick = {
+                // Si tocan el mapa vacío, cerramos la tarjeta
+                selectedBusiness = null
                 isSearchActive = false
-                showBusinessList = false
             }
         ) {
-            // Marcadores de negocios
-            businesses.forEach { business ->
+            listaNegociosReales.forEach { negocio ->
                 Marker(
-                    state = MarkerState(position = business.location),
-                    title = business.name,
-                    snippet = business.details,
+                    state = MarkerState(position = LatLng(negocio.latitud, negocio.longitud)),
+                    title = negocio.nombreNegocio,
                     onClick = {
-                        showBusinessList = true
-                        false
+                        // AL TOCAR UN PIN, SELECCIONAMOS ESE NEGOCIO
+                        selectedBusiness = negocio
+                        false // false = centrar cámara y abrir info window default (opcional)
                     }
                 )
             }
         }
 
-        // Barra de búsqueda flotante
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
+        // 2. BARRA DE BÚSQUEDA (Igual que antes)
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(8.dp, RoundedCornerShape(28.dp)),
+                modifier = Modifier.fillMaxWidth().shadow(8.dp, RoundedCornerShape(28.dp)),
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Search,
-                        contentDescription = "Buscar",
-                        tint = Gray600,
-                        modifier = Modifier.size(24.dp)
-                    )
-
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Search, "Buscar", tint = Gray600, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
-
                     if (isSearchActive) {
                         OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = { Text("Buscar negocios...", color = Gray400) },
+                            value = searchQuery, onValueChange = { searchQuery = it },
+                            placeholder = { Text("Buscar...", color = Gray400) },
                             modifier = Modifier.weight(1f),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent,
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent
-                            ),
+                            colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent),
                             singleLine = true
                         )
-
-                        IconButton(onClick = {
-                            isSearchActive = false
-                            searchQuery = ""
-                        }) {
-                            Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = Gray600)
-                        }
+                        IconButton(onClick = { isSearchActive = false; searchQuery = "" }) { Icon(Icons.Default.Close, "Cerrar", tint = Gray600) }
                     } else {
-                        Text(
-                            text = "Buscar negocios cercanos...",
-                            color = Gray500,
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { isSearchActive = true }
-                        )
-
-                        IconButton(onClick = { /* Abrir filtros */ }) {
-                            Icon(
-                                imageVector = Icons.Outlined.FilterList,
-                                contentDescription = "Filtros",
-                                tint = Gray600
-                            )
-                        }
+                        Text("Buscar negocios cercanos...", color = Gray500, modifier = Modifier.weight(1f).clickable { isSearchActive = true })
                     }
                 }
             }
         }
 
-        // Botones flotantes en la esquina inferior derecha
-        Column(
+        // 3. BOTÓN DE UBICACIÓN (Lo moví un poco para que no tape la tarjeta)
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp)
-                .padding(bottom = 80.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(bottom = 180.dp, end = 16.dp) // Subido para no estorbar
         ) {
-            // Botón para ver lista de negocios
-            FloatingActionButton(
-                onClick = { showBusinessList = !showBusinessList },
-                containerColor = if (showBusinessList) Amber500 else Color.White,
-                contentColor = if (showBusinessList) Color.White else Gray700,
-                modifier = Modifier.size(56.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.FilterList,
-                    contentDescription = "Ver lista"
-                )
-            }
-
-            // Botón de ubicación actual
             FloatingActionButton(
                 onClick = {
                     if (hasLocationPermission) {
-                        getCurrentLocation(context) { location ->
-                            currentLocation = location
-                            scope.launch {
-                                cameraPositionState.animate(
-                                    com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(location, 17f),
-                                    durationMs = 1000
-                                )
-                            }
+                        getCurrentLocation(context) { loc ->
+                            scope.launch { cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(loc, 17f)) }
                         }
-                    } else {
-                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                    }
+                    } else { locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) }
                 },
                 containerColor = Amber500,
-                contentColor = Color.White,
-                modifier = Modifier.size(56.dp)
+                contentColor = Color.White
             ) {
-                Icon(
-                    imageVector = Icons.Default.MyLocation,
-                    contentDescription = "Mi ubicación",
-                    modifier = Modifier.size(28.dp)
-                )
+                Icon(Icons.Default.MyLocation, "Mi ubicación")
             }
         }
 
-        // Lista deslizable de negocios (desde abajo)
+        // 4. TARJETA FLOTANTE DEL NEGOCIO SELECCIONADO
+        // Solo aparece si selectedBusiness NO es nulo
         AnimatedVisibility(
-            visible = showBusinessList,
+            visible = selectedBusiness != null,
             enter = slideInVertically(initialOffsetY = { it }),
             exit = slideOutVertically(targetOffsetY = { it }),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp)
-                    .padding(bottom = 80.dp),
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
-            ) {
-                Column(
+            if (selectedBusiness != null) {
+                Card(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 90.dp) // Espacio para el BottomBar
+                        .clickable { onBusinessClick(selectedBusiness!!) }, // AL CLICK, NAVEGAMOS
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
                 ) {
-                    // Barra superior
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Negocios cerca de ti",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = Gray700
-                        )
-
-                        IconButton(onClick = { showBusinessList = false }) {
-                            Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = Gray600)
+                        // Icono del negocio
+                        Box(
+                            modifier = Modifier
+                                .size(60.dp)
+                                .background(Amber100, RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Store, null, tint = Amber600, modifier = Modifier.size(32.dp))
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
 
-                    // Lista de negocios
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(businesses.size) { index ->
-                            val business = businesses[index]
-                            BusinessListItem(
-                                name = business.name,
-                                details = business.details,
-                                imageUrl = business.imageUrl,
-                                onClick = {
-                                    onBusinessClick()
-                                    showBusinessList = false
-                                }
+                        // Info
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = selectedBusiness!!.nombreNegocio ?: "Negocio",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = Gray900
                             )
+                            Text(
+                                text = selectedBusiness!!.categoria ?: "Comercio Local",
+                                color = Gray500,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "Ver detalles >",
+                                color = Blue500,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+
+                        // Botón cerrar
+                        IconButton(onClick = { selectedBusiness = null }) {
+                            Icon(Icons.Default.Close, "Cerrar", tint = Gray400)
                         }
                     }
                 }
             }
         }
 
-        // Bottom Navigation
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-        ) {
-            AppBottomNavigationBar(
-                currentScreen = Screen.Map,
-                onNavigate = onNavigate
-            )
+        // 5. BARRA DE NAVEGACIÓN INFERIOR
+        Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            AppBottomNavigationBar(currentScreen = Screen.Map, onNavigate = onNavigate)
         }
     }
 }
 
-// Función para obtener la ubicación actual
-private fun getCurrentLocation(
-    context: Context,
-    onLocationReceived: (LatLng) -> Unit
-) {
-    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-
+private fun getCurrentLocation(context: Context, onLocationReceived: (LatLng) -> Unit) {
     try {
-        fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-            location?.let {
-                onLocationReceived(LatLng(it.latitude, it.longitude))
-            }
+        LocationServices.getFusedLocationProviderClient(context).lastLocation.addOnSuccessListener { location ->
+            location?.let { onLocationReceived(LatLng(it.latitude, it.longitude)) }
         }
-    } catch (e: SecurityException) {
-        // Manejar excepción
-    }
+    } catch (e: SecurityException) { }
 }
-
-@Composable
-fun BusinessListItem(
-    name: String,
-    details: String,
-    imageUrl: String,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Gray50),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
-            Image(
-                painter = rememberAsyncImagePainter(imageUrl),
-                contentDescription = name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(12.dp))
-            )
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = Gray700
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = details,
-                    color = Gray600,
-                    fontSize = 14.sp
-                )
-            }
-        }
-    }
-}
-
-// Data class para negocios
-data class Business(
-    val name: String,
-    val details: String,
-    val imageUrl: String,
-    val location: LatLng
-)
